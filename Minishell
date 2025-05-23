@@ -1,0 +1,105 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+#define MAX_LINE 1024
+#define MAX_TOKENS 64
+#define DELIM " \t\r\n\a"
+
+void shell_loop();
+char **split_line(char *line);
+int execute(char **args);
+int shell_cd(char **args);
+int shell_exit(char **args);
+
+char *builtin_str[] = {"cd", "exit"};
+int (*builtin_func[]) (char **) = {&shell_cd, &shell_exit};
+int num_builtins() { return sizeof(builtin_str) / sizeof(char *); }
+
+int main() {
+    shell_loop();
+    return 0;
+}
+
+void shell_loop() {
+    char *line = NULL;
+    size_t bufsize = 0;
+    char **args;
+    int status = 1;
+
+    while (status) {
+        printf("minishell> ");
+        if (getline(&line, &bufsize, stdin) == -1) {
+            perror("getline");
+            break;
+        }
+
+        args = split_line(line);
+        if (args[0] != NULL) {
+            status = execute(args);
+        }
+
+        free(args);
+    }
+
+    free(line);
+}
+
+char **split_line(char *line) {
+    int bufsize = MAX_TOKENS, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char*));
+    char *token;
+
+    if (!tokens) {
+        fprintf(stderr, "allocation error\n");
+        exit(EXIT_FAILURE);
+    }
+
+    token = strtok(line, DELIM);
+    while (token != NULL) {
+        tokens[position++] = token;
+
+        if (position >= bufsize) {
+            bufsize += MAX_TOKENS;
+            tokens = realloc(tokens, bufsize * sizeof(char*));
+            if (!tokens) {
+                fprintf(stderr, "allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        token = strtok(NULL, DELIM);
+    }
+
+    tokens[position] = NULL;
+    return tokens;
+}
+
+int execute(char **args) {
+    if (args[0] == NULL) return 1;
+
+    for (int i = 0; i < num_builtins(); i++) {
+        if (strcmp(args[0], builtin_str[i]) == 0) {
+            return (*builtin_func[i])(args);
+        }
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (execvp(args[0], args) == -1) {
+            perror("minishell");
+        }
+        exit(EXIT_FAILURE);
+    } else if (pid < 0) {
+        perror("minishell");
+    } else {
+        int wstatus;
+        waitpid(pid, &wstatus, 0);
+    }
+
+    return 1;
+}
+
+creer une minishell en C
